@@ -1,8 +1,14 @@
 /****
  * 
  * iot_broker simula un broker de mensajes IoT, que genera mensajes de forma aleatoria y los almacena en una cola.
- * Cada mensaje tiene una estructura interna con un remesa, id y prioridad.
+ * Cada mensaje tiene una estructura interna con un remesa, id, prioridad y timestamp.
  * 
+ * Para leer del broquer se usa la ruta GET localhost:3000/iot_broker/getmsg?num=1234
+ * el num indica cuantos mensajes se quieren leer de la cola.
+ * Si hay menos mensajes en la cola que los solicitados, se devuelven todos los que haya.
+ * Los mensajes leidos se eliminan de la cola.
+ * 
+ * La generación de mensajes es aleatoria, tanto en número de mensajes generados como en el tiempo entre remesas.
  * 
  */
 
