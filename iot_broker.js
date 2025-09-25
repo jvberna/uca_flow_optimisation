@@ -82,7 +82,11 @@ const crearMensajes = () => {
 
   // hacemos push de los mensajes a la cola (encola al final)
   for (let i=0; i<newMsg; i++) {
-    colaMensajes.push( { remesa: contador, id: contador+'-'+i , priority : genPriority(minPriority, maxPriority) } );
+    colaMensajes.push( 
+      { remesa: contador, 
+        id: contador+'-'+i , 
+        priority : genPriority(minPriority, maxPriority) 
+      } );
   }
 
   // programamos la siguiente generación de mensajes
