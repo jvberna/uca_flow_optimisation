@@ -85,7 +85,8 @@ const crearMensajes = () => {
     colaMensajes.push( 
       { remesa: contador, 
         id: contador+'-'+i , 
-        priority : genPriority(minPriority, maxPriority) 
+        priority : genPriority(minPriority, maxPriority) ,
+        timestamp: Date.now()
       } );
   }
 
