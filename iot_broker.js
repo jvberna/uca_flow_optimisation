@@ -54,6 +54,7 @@ app.get(
 // Iniciar el servidor
 app.listen(port, () => {
   console.log(`Servidor escuchando en http://localhost:${port}`);
+  // Después de iniciar el servidor, comenzamos a generar mensajes
   crearMensajes();
 });
 
@@ -96,4 +97,3 @@ const crearMensajes = () => {
   setTimeout(crearMensajes, siguiente);
 }
 
-//crearMensajes();
