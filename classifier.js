@@ -24,15 +24,16 @@ const minPriority = 1;
 
 // Estructura de colas de mensajes
 const priorityMsgQueues = [];
+const pirorityExpirationTimeQueue = [];
 for (let i = 0; i < maxPriority; i++) {
   priorityMsgQueues[i] = [];
+  pirorityExpirationTimeQueue[i] = 10000*(i+1); // tiempo de expiración de cada cola
 }
 
 // cola de expiración de mensajes
 const expirationMsgQueue = [];
-const expirationTime = 50000; // 10 segundos
 const expirationVerifiction = 1000; // cada 1 segundo
-const expirationMaxQueueMsg = 50000; // máximo mensajes en la cola de expiración, si se supera, se eliminan los más antiguos
+const expirationMaxQueueMsg = 5000; // máximo mensajes en la cola de expiración, si se supera, se eliminan los más antiguos
 
 
 // Tiempo para lectura de la cola del broker IoT
@@ -110,18 +111,13 @@ app.listen(port, () => {
 });
 
 
-
-
-
-
-
 /**
  * Funcion para leer del endpoint IoT_broker
  * ealiza una solicitud GET al endpoint IoT y muestra el mensaje.
 */
 
 // Función que obtiene mensajes del broker IoT y los devuelve
-async function getIotMessage() {
+async function getIotMessages() {
 
   try {
     // Axios realiza la solicitud GET. Por defecto, ya espera que la respuesta sea JSON.
@@ -157,11 +153,9 @@ async function getIotMessage() {
 }
 
 
-
-
 // función que lee del broker IoT y clasifica los mensjaes recibidos en las colas de prioridad
-async function readFromIotBroker() {
-  let resonse = await getIotMessage();
+async function readFromIotBrokerAndClassify() {
+  let resonse = await getIotMessages();
   if (!resonse) {
     console.error("No se ha podido leer del broker IoT");
     return;
@@ -181,6 +175,10 @@ async function readFromIotBroker() {
     }
   });
 
+  showQueuesStatus();
+}
+
+function showQueuesStatus() {
   // Mostramos el estado de las colas
   console.log("-----------------------------------------------------");
   console.log("\nEstado de las colas de prioridad tras leer del broker IoT:");
@@ -198,15 +196,16 @@ async function expirationMsgQueueHandler() {
   now = Date.now();
   let expiredCount = 0;
   for (let i = 0; i < priorityMsgQueues.length; i++) {
-    while (priorityMsgQueues[i].length > 0 && (now - priorityMsgQueues[i][0].timestamp) > expirationTime) {
+    expiredCount = 0;
+    while (priorityMsgQueues[i].length > 0 && (now - priorityMsgQueues[i][0].timestamp) > pirorityExpirationTimeQueue[i]) {
       expiredMsg = priorityMsgQueues[i].shift()
       //console.log(now," Expirado mensaje ", expiredMsg, " tiempo ", now - expiredMsg.timestamp , " la cola prioridad ",i," ahora tiene ", priorityMsgQueues[i].length, " mensajes y expriedQ ",expirationMsgQueue.length);
       expirationMsgQueue.push(expiredMsg);
       expiredCount++;
     }
-    console.log(expiredCount, " expirado de priority ",i,", la cola de expiración tiene ", expirationMsgQueue.length, " mensajes.");
+    if (expiredCount>0) console.log(expiredCount, " expirado de priority ",i+1," con pirorityExpirationTimeQueue:",pirorityExpirationTimeQueue[i],", la cola de expiración tiene ", expirationMsgQueue.length, " mensajes.");
   }
-
+  showQueuesStatus(); 
   // Si en la cola hay más mensajes de los permitidos, eliminamos los más antiguos
   if (expirationMaxQueueMsg > 0 && expirationMsgQueue.length > expirationMaxQueueMsg) {
     expirationMsgQueue.splice(0, expirationMsgQueue.length - expirationMaxQueueMsg)
@@ -216,112 +215,9 @@ async function expirationMsgQueueHandler() {
 
 const launch = () => {
   // Leemos del broker IoT cada cierto tiempo
-  setInterval(readFromIotBroker, timeToReadIotBroker);
+  setInterval(readFromIotBrokerAndClassify, timeToReadIotBroker);
   // Gestionamos la expiración de mensajes cada cierto tiempo
   setInterval(expirationMsgQueueHandler, expirationVerifiction);
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-// Creamos un endpoint que atiende '/iot_broker/getmsg?num=1234' solicitando X número de mensajes de la cola
-const express = require('express');
-const { query, validationResult } = require('express-validator');
-
-const app = express();
-const port = 3000;
-const rute = '/iot_broker/getmsg';
-
-// Middleware para la ruta GET /iot_broker/getmsg
-app.get( 
-  rute,
-  [
-    // Validaciones para los parámetros de la consulta
-    query('num')
-      .notEmpty()
-      .withMessage('num es un campo requerido.')
-      .isNumeric()
-      .withMessage('num debe ser un numero.')
-  ],
-  (req, res) => {
-    // Manejo de los errores de validación
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    // Si la validación es exitosa, procesa la solicitud
-    const { num } = req.query;
-
-    
-    // desencolo de la cola de mensajes tantos mensajes como dice num
-    // extraemos los mensajes del principio de la cola
-    const returnMsg = colaMensajes.splice(0, num);
-    console.log('Desencolamos ',num,' menajes de la cola. Quedan ',colaMensajes.length,' mensajes en la cola.');
-    
-    // Respondemos con los mensajes extraídos
-    res.status(200).json({
-      message: 'Extraer mensajes de la cola',
-      data: req.query,
-      mensajes: returnMsg
-    });
-  }
-);
-
-// Iniciar el servidor
-app.listen(port, () => {
-  console.log(`Servidor escuchando en http://localhost:${port}`);
-  // Después de iniciar el servidor, comenzamos a generar mensajes
-  crearMensajes();
-});
-
-let colaMensajes = [];
-let contador = 0;
-// Máximo y mínimo mensajes a generar en cada remesa
-const maxMensajes = 10;
-const minMensajes = 5;
-// Tiempo máximo en ms para generar una nueva remesa de mensajes
-const maxTimeToGenerateMsg = 1000;
-// Prioridades de los mensajes
-const maxPriority = 4;  
-const minPriority = 1;
-
-// Función para generar una prioridad aleatoria entre min y max (ambos inclusive)
-const genPriority = (min, max) => {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-// Función que genera mensajes de forma aleatoria y los añade a la cola
-// Los mensajes se encolan al final de la cola
-// Cada mensaje tiene la estructura { remesa: X, id: X-Y, priority: Z }
-const crearMensajes = () => {
-  contador++;
-  const newMsg = Math.round((Math.random()*(maxMensajes - minMensajes))) + minMensajes;
-
-  // hacemos push de los mensajes a la cola (encola al final)
-  for (let i=0; i<newMsg; i++) {
-    colaMensajes.push( 
-      { remesa: contador, 
-        id: contador+'-'+i , 
-        priority : genPriority(minPriority, maxPriority) ,
-        timestamp: Date.now()
-      } );
-  }
-
-  // programamos la siguiente generación de mensajes
-  const siguiente = Math.round(Math.random()*maxTimeToGenerateMsg);
-  console.log(contador,'.- Genero ',newMsg, ' nuevos mensajes, la cola tiene ',colaMensajes.length,'. Siguiente en ',siguiente, 'ms ');
-  setTimeout(crearMensajes, siguiente);
-}
-*/
