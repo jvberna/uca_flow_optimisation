@@ -19,11 +19,10 @@ const { query, validationResult } = require('express-validator');
 
 const app = express();
 const port = 3000;
-const rute = '/iot_broker/getmsg';
 
 // Middleware para la ruta GET /iot_broker/getmsg
 app.get( 
-  rute,
+  '/iot_broker/getmsg',
   [
     // Validaciones para los parámetros de la consulta
     query('num')
@@ -45,8 +44,8 @@ app.get(
     
     // desencolo de la cola de mensajes tantos mensajes como dice num
     // extraemos los mensajes del principio de la cola
-    const returnMsg = colaMensajes.splice(0, num);
-    console.log('Desencolamos ',num,' menajes de la cola. Quedan ',colaMensajes.length,' mensajes en la cola.');
+    const returnMsg = msgQueue.splice(0, num);
+    console.log('Desencolamos ',num,' menajes de la cola. Quedan ',msgQueue.length,' mensajes en la cola.');
     
     // Respondemos con los mensajes extraídos
     res.status(200).json({
@@ -59,21 +58,23 @@ app.get(
 
 // Iniciar el servidor
 app.listen(port, () => {
-  console.log(`Servidor escuchando en http://localhost:${port}`);
+  console.log(`IoT Broker escuchando en http://localhost:${port}`);
   // Después de iniciar el servidor, comenzamos a generar mensajes
   crearMensajes();
 });
 
-let colaMensajes = [];
+let msgQueue = [];
 let contador = 0;
 // Máximo y mínimo mensajes a generar en cada remesa
-const maxMensajes = 10;
-const minMensajes = 5;
+const maxMensajes = 1000;
+const minMensajes = 500;
 // Tiempo máximo en ms para generar una nueva remesa de mensajes
 const maxTimeToGenerateMsg = 1000;
 // Prioridades de los mensajes
 const maxPriority = 4;  
 const minPriority = 1;
+// Controlar el número máximo de mensajes en la cola para depuración, -1 indica sin límite
+const maxQueueMsg = 100000;  
 
 // Función para generar una prioridad aleatoria entre min y max (ambos inclusive)
 const genPriority = (min, max) => {
@@ -88,8 +89,9 @@ const crearMensajes = () => {
   const newMsg = Math.round((Math.random()*(maxMensajes - minMensajes))) + minMensajes;
 
   // hacemos push de los mensajes a la cola (encola al final)
+  // estructura del mensaje { remesa: X, id: X-Y, priority: Z , timestamp: T}
   for (let i=0; i<newMsg; i++) {
-    colaMensajes.push( 
+    msgQueue.push( 
       { remesa: contador, 
         id: contador+'-'+i , 
         priority : genPriority(minPriority, maxPriority) ,
@@ -97,9 +99,15 @@ const crearMensajes = () => {
       } );
   }
 
+
+  // Si en la cola hay más mensajes de los permitidos, eliminamos los más antiguos
+  if (maxQueueMsg>0 && msgQueue.length>maxQueueMsg) {
+    msgQueue.splice(0, msgQueue.length - maxQueueMsg)
+  }
+
   // programamos la siguiente generación de mensajes
   const siguiente = Math.round(Math.random()*maxTimeToGenerateMsg);
-  console.log(contador,'.- Genero ',newMsg, ' nuevos mensajes, la cola tiene ',colaMensajes.length,'. Siguiente en ',siguiente, 'ms ');
+  console.log('Remesa ',contador,'.- Genero ',newMsg, ' nuevos mensajes, la cola tiene ',msgQueue.length,'. Siguiente en ',siguiente, 'ms ');
   setTimeout(crearMensajes, siguiente);
 }
 
