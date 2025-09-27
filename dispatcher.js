@@ -2,7 +2,6 @@
  * Variables para la conexión al classifier
  */
 const axios = require('axios');
-const { response } = require('express');
 const ENDPOINT_URL = 'http://localhost:3100/classifier/getmsg';
 
 
@@ -10,12 +9,99 @@ const ENDPOINT_URL = 'http://localhost:3100/classifier/getmsg';
  * Variables del dispatcher para controlar su cola priorizada
  */
 
-const sortQueu = [];
-const maxSortQueu = 5000; // número de colas priorizadas
-const numMessages = 1000; // número de mensajes a solicitar al classifier
+const sortPriorityQueu = [];
+const maxSortQueu = -1; // número de colas priorizadas, -1 ignora el límite
+const numMessages = 600; // número de mensajes a solicitar al classifier
+const tiempoLectura = 1000; // cada segundo
 const porwerPriority = [];  // establecer el valor de potencia de cada cola de prioridad
 const msgPerPriority = []; // mensajes por cada cola de prioridad
 const maxPriority = 4;
+
+
+
+// Creamos un endpoint que atiende '/iot_broker/getmsg?num=1234' solicitando X número de mensajes de la cola
+const express = require('express');
+const { query, validationResult } = require('express-validator');
+
+const app = express();
+const port = 3200;
+
+const iniTime = Date.now();
+const fs = require('fs');
+const logFilePathDispatcher = 'dispatcher.csv';
+const logFilePathREST = 'dispatcher_REST.csv';
+
+// Escribir en le archivo de log con timestap
+function logMessage(file, message, printTimestamp = true) {
+    const timestamp = Date.now();
+    if (printTimestamp) {
+        message = timestamp - iniTime + ';' + message;
+    }
+    fs.appendFile(file, message + '\n',
+        (err) => {
+            if (err) {
+                // Si ocurre un error, lo registramos en la consola
+                console.error('Error al escribir en el archivo de log:', err);
+                return;
+            };
+        })
+}
+
+// Si el archivo ya existe, lo eliminamos para empezar de nuevo
+function initializeLogFiles() {
+    fs.writeFileSync(logFilePathDispatcher, '', 'utf8');
+    fs.writeFileSync(logFilePathREST, '', 'utf8');
+
+    logMessage(logFilePathDispatcher, "Timestamp; P1 ; PowerPriority; msgPerPriority; Reales Leidos (remainint); Reales recibidos;  P2 ; PowerPriority; msgPerPriority; Reales Leidos (remainint); Reales recibidos; P3 ; PowerPriority; msgPerPriority; Reales Leidos (remainint); Reales recibidos; P4 ; PowerPriority; msgPerPriority; Reales Leidos (remainint); Reales recibidos; Expirados; Solicitados; Leidos; Remaining final", false);
+    logMessage(logFilePathREST, "Timestamp; Pedidos ; Extraidos; Quedan", false);
+}
+
+initializeLogFiles();
+
+// Middleware para la ruta GET /dispatcher/getmsg
+app.get(
+    '/dispatcher/getmsg',
+    [
+        // Validaciones para los parámetros de la consulta
+        query('num')
+            .notEmpty()
+            .withMessage('num es un campo requerido.')
+            .isNumeric()
+            .withMessage('num debe ser un numero.')
+    ],
+    (req, res) => {
+        // Manejo de los errores de validación
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        // Si la validación es exitosa, procesa la solicitud
+        const { num } = req.query;
+
+
+        // desencolo de la cola de mensajes tantos mensajes como dice num
+        // extraemos los mensajes del principio de la cola
+        const returnMsg = sortPriorityQueu.splice(0, num);
+        console.log('Desencolamos ', num, ' menajes de la cola. Quedan ', sortPriorityQueu.length, ' mensajes en la cola.');
+        const reg = num + ";" + returnMsg.length + ";" + sortPriorityQueu.length;
+        logMessage(logFilePathREST, reg, true);
+        // Respondemos con los mensajes extraídos
+        res.status(200).json({
+            message: 'Extraer mensajes de la cola',
+            data: req.query,
+            mensajes: returnMsg,
+            numMsg: returnMsg.length
+        });
+    }
+);
+
+// Iniciar el servidor
+app.listen(port, () => {
+    console.log(`Dispatcher escuchando en http://localhost:${port}`);
+    // Después de iniciar el servidor, comenzamos a generar mensajes
+    launch();
+});
 
 // Cramos el array de powerPriority dando más prioridad a la cola 1, la mitad a la 2, la mitad a la 3... y luego convertimos eso en mensjaes de numMessages
 const configurePowerPriority = () => {
@@ -81,13 +167,78 @@ async function getClassifierMessage(num, priority) {
 }
 
 // Falta esta funcion ////////////////////////////////////////////
+/****
+ * Función que lee de cada cola, en función del power que tiene definido
+ * y mete los mensajes en la cola priorizada
+ * si lee menos mensajes de los solicitados, acumula a la siguiente cola el número de mensajes
+ * y si quedan mensajes, lee de la de expirados
+ */
+async function readAndSort() {
 
-async function launch() {
-    const data = await getClassifierMessage(10, 1);
-    console.log("\nDatos recibidos del classifier:");
-    console.log(data);
+    let totalRead = 0;
+    let remaining = 0;
+    let reg = "";
+
+    for (let i = 0; i < maxPriority; i++) {
+        // leemos mensajes de la cola de prioridad i+1
+        //     la estructura devuelta estructura{
+        //   message: 'Extraer mensajes de la cola prioridad' + priority,
+        //   data: 'num: ' + num + ' priority:' + priority,
+        //   mensajes: returnMsg,
+        //   numMsg: returnMsg.length
+        remaining += msgPerPriority[i];
+        const data = await getClassifierMessage(remaining, i + 1);
+        if (!data) {
+            console.error("No se ha podido leer del Classifier");
+            return;
+        }        // Calculamos si ha sobrado potencia
+        reg += (i + 1) + ";" + porwerPriority[i] + ";" + msgPerPriority[i] + ";" + remaining + ";" + data.numMsg + ";";
+        remaining -= data.numMsg;
+        // Acumulamos el total de mensajes leidos
+        totalRead += data.numMsg;
+        console.log(`Leídos ${data.numMsg} mensajes de la cola de prioridad ${i + 1}. Quedan ${remaining} mensajes por leer.`);
+        // Metemos los mensajes leidos en la cola ordenada de prioridad
+        if (data.numMsg > 0) {
+            data.mensajes.forEach(msg => {
+                sortPriorityQueu.push(msg)
+            });
+        }
+
+        // Limitamos el tamaño de la cola priorizada a maxSortQueu o si -1 ignoramos el límite
+        if (maxSortQueu > 0 && sortPriorityQueu.length > maxSortQueu) {
+            sortPriorityQueu.splice(0, sortPriorityQueu.length - sortPriorityQueu)
+        }
+    }
+
+    // si han quedado en remaining mensajes por leer, los leemos de la cola de expirados
+    let dataExp;
+    if (remaining > 0) {
+        dataExp = await getClassifierMessage(remaining, 0);
+        if (dataExp) {
+            totalRead += dataExp.numMsg;
+            // Metemos los mensajes leidos en la cola ordenada de prioridad
+            if (dataExp.numMsg > 0) {
+                dataExp.mensajes.forEach(msg => {
+                    sortPriorityQueu.push(msg)
+                });
+            }
+            reg += "0;" + remaining + ";" + dataExp.numMsg + ";" + remaining - dataExp.numMsg;
+            remaining -= dataExp.numMsg;
+            console.log(`Leídos ${dataExp.numMsg} mensajes de la cola de Expiración. Quedan ${remaining} mensajes por leer.`);
+
+        } else {
+            reg += "0;" + remaining + ";0;" + remaining;
+        }
+    }
+    reg += "0;" + remaining + ";0;" + remaining;
+    logMessage(logFilePathDispatcher, reg, true);
+
+
+    console.log("\nTotal de mensajes leídos y metidos en la cola priorizada: ", totalRead);
+    console.log("Tamaño actual de la cola priorizada: ", sortPriorityQueu.length);
 }
 
-
-setInterval(launch, 1000);
-
+// Ejecutamos la función de leer y ordenar cada segundo 
+function launch() {
+    setInterval(readAndSort, tiempoLectura);
+}
