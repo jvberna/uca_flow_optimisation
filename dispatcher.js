@@ -11,8 +11,8 @@ const ENDPOINT_URL = 'http://localhost:3100/classifier/getmsg';
 
 const sortPriorityQueu = [];
 const maxSortQueu = -1; // número de colas priorizadas, -1 ignora el límite
-const numMessages = 600; // número de mensajes a solicitar al classifier
-const tiempoLectura = 1000; // cada segundo
+const numMessages = 800; // número de mensajes a solicitar al classifier
+const tiempoLectura = 100; // cada segundo
 const porwerPriority = [];  // establecer el valor de potencia de cada cola de prioridad
 const msgPerPriority = []; // mensajes por cada cola de prioridad
 const maxPriority = 4;

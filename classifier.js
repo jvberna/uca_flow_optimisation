@@ -27,7 +27,7 @@ const priorityMsgQueues = [];
 const pirorityExpirationTimeQueue = [];
 for (let i = 0; i < maxPriority; i++) {
   priorityMsgQueues[i] = [];
-  pirorityExpirationTimeQueue[i] = 10000 * (i + 1); // tiempo de expiración de cada cola comienza en 10, 20, 30 y 40 segundos
+  pirorityExpirationTimeQueue[i] = 100000 * (i + 1); // tiempo de expiración de cada cola comienza en 10, 20, 30 y 40 segundos
 }
 
 // cola de expiración de mensajes
@@ -45,8 +45,8 @@ const expirationMaxQueueMsg = -1; // máximo mensajes en la cola de expiración,
 const axios = require('axios');
 const { response } = require('express');
 const ENDPOINT_URL = 'http://localhost:3000/iot_broker/getmsg';
-const NUM_MESSAGES = 600; // Número de mensajes a solicitar
-const timeToReadIotBroker = 1000; // Tiempo para leer del broker
+const NUM_MESSAGES = 800; // Número de mensajes a solicitar
+const timeToReadIotBroker = 100; // Tiempo para leer del broker
 
 const iniTime = Date.now();
 
