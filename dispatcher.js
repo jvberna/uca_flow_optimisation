@@ -11,8 +11,8 @@ const ENDPOINT_URL = 'http://localhost:3100/classifier/getmsg';
 
 const sortPriorityQueu = [];
 const maxSortQueu = -1; // número de colas priorizadas, -1 ignora el límite
-const numMessages = 800; // número de mensajes a solicitar al classifier
-const tiempoLectura = 100; // cada segundo
+const numMessages = 1000; // número de mensajes a solicitar al classifier
+const tiempoLectura = 1000; // cada segundo
 const porwerPriority = [];  // establecer el valor de potencia de cada cola de prioridad
 const msgPerPriority = []; // mensajes por cada cola de prioridad
 const maxPriority = 4;
@@ -28,8 +28,8 @@ const port = 3200;
 
 const iniTime = Date.now();
 const fs = require('fs');
-const logFilePathDispatcher = 'dispatcher.csv';
-const logFilePathREST = 'dispatcher_REST.csv';
+const logFilePathDispatcher = 'csv/dispatcher.csv';
+const logFilePathREST = 'csv/dispatcher_REST.csv';
 
 // Escribir en le archivo de log con timestap
 function logMessage(file, message, printTimestamp = true) {
@@ -178,10 +178,13 @@ async function readAndSort() {
     let totalRead = 0;
     let remaining = 0;
     let reg = "";
-
+    let msg = "Leer: [" + msgPerPriority[0];
+    for (let i = 1; i < maxPriority; i++) { msg += ',' + msgPerPriority[i] }
+    msg += "]";
+    console.log(msg);
     for (let i = 0; i < maxPriority; i++) {
         // leemos mensajes de la cola de prioridad i+1
-        //     la estructura devuelta estructura{
+        //     la estructura devuelta estructura{ 
         //   message: 'Extraer mensajes de la cola prioridad' + priority,
         //   data: 'num: ' + num + ' priority:' + priority,
         //   mensajes: returnMsg,
@@ -196,7 +199,7 @@ async function readAndSort() {
         remaining -= data.numMsg;
         // Acumulamos el total de mensajes leidos
         totalRead += data.numMsg;
-        console.log(`Leídos ${data.numMsg} mensajes de la cola de prioridad ${i + 1}. Quedan ${remaining} mensajes por leer.`);
+        console.log('Read from Categoriser priorityQueue ', i + 1, ':', data.numMsg, ' remaining: ', remaining)
         // Metemos los mensajes leidos en la cola ordenada de prioridad
         if (data.numMsg > 0) {
             data.mensajes.forEach(msg => {
@@ -229,8 +232,9 @@ async function readAndSort() {
         } else {
             reg += "0;" + remaining + ";0;" + remaining;
         }
+    } else {
+        reg += "0;" + remaining + ";0;" + remaining;
     }
-    reg += "0;" + remaining + ";0;" + remaining;
     logMessage(logFilePathDispatcher, reg, true);
 
 

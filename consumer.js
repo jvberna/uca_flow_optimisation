@@ -3,6 +3,37 @@ const ENDPOINT_URL = 'http://localhost:3200/dispatcher/getmsg';
 const num = 600; // mensajes que del dispatcher se sirven al sistema
 const timeLectura = 1000; // cada segundo
 
+
+const iniTime = Date.now();
+const fs = require('fs');
+const logFilePathConsumer = 'csv/consumer.csv';
+
+// Escribir en le archivo de log con timestap
+function logMessage(file, message, printTimestamp = true) {
+    const timestamp = Date.now();
+    if (printTimestamp) {
+        message = timestamp - iniTime + ';' + message;
+    }
+    fs.appendFile(file, message ,
+        (err) => {
+            if (err) {
+                // Si ocurre un error, lo registramos en la consola
+                console.error('Error al escribir en el archivo de log:', err);
+                return;
+            };
+        })
+}
+
+// Si el archivo ya existe, lo eliminamos para empezar de nuevo
+function initializeLogFiles() {
+    fs.writeFileSync(logFilePathConsumer, '', 'utf8');
+
+    logMessage(logFilePathConsumer, "Timestamp; Remesa ; ID; Prioridad; Msg timestamp\n", false);
+}
+
+initializeLogFiles();
+
+
 // Función que obtiene mensajes del broker IoT y los devuelve
 async function getDisptacherMessage() {
 
@@ -17,7 +48,7 @@ async function getDisptacherMessage() {
             timeout: 5000 // Tiempo de espera de 5 segundos
         });
         console.log("Leidos ", response.data.numMsg, " mensajes del dispatcher");
-        //return response.data;
+        return response.data;
 
 
     } catch (error) {
@@ -38,6 +69,22 @@ async function getDisptacherMessage() {
         return null;
     }
 
+} 
+
+async function consumeMessages() {
+    const data = await getDisptacherMessage();
+    console.log(data.mensajes);
+    let reg = "";
+    // Para cada mensaje leido vamos a escribir en el archivo sus datos
+    const timestamp = Date.now();
+        message = timestamp - iniTime
+    data.mensajes.forEach(msg => {
+        console.log("Mensaje recibido: ", msg);
+        reg += timestamp - iniTime +";"+msg.remesa + ";" + msg.id + ";" + msg.priority + ";" + msg.timestamp + "\n";
+    });
+    logMessage(logFilePathConsumer, reg, false);
+
+
 }
 
-setInterval(getDisptacherMessage,timeLectura); 
+setInterval(consumeMessages,timeLectura); 

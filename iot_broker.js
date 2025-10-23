@@ -14,7 +14,6 @@
 
 
 // Creamos un endpoint que atiende '/iot_broker/getmsg?num=1234' solicitando X número de mensajes de la cola
-const { time, log } = require('console');
 const express = require('express');
 const { query, validationResult } = require('express-validator');
 
@@ -24,9 +23,9 @@ const port = 3000;
 const iniTime = Date.now();
 
 const fs = require('fs');
-const logFilePathRemesa = 'iot_broker_generation.csv';  // se almacena información sobre las remesas generadas
-const logFilePathREST = 'iot_broker_REST.csv';  // se almacena información sobre las peticiones recibidas
-const logFilePathGenerate = 'iot_broker_generated.csv';  // se almacena todo lo que se ha generado
+const logFilePathRemesa = 'csv/iot_broker_generation.csv';  // se almacena información sobre las remesas generadas
+const logFilePathREST = 'csv/iot_broker_REST.csv';  // se almacena información sobre las peticiones recibidas
+const logFilePathGenerate = 'csv/iot_broker_generated.csv';  // se almacena todo lo que se ha generado
 
 
 let msgQueue = [];
@@ -35,7 +34,7 @@ let contador = 0;
 
 // Máximo y mínimo mensajes a generar en cada remesa
 const maxMensajes = 1000;
-const minMensajes = 300;
+const minMensajes = 310;
 
 // Cada X remesas vamos a laternar entre día y noche, de día se generan más mensajes que de noche
 let esDia = true;
@@ -43,7 +42,7 @@ const remesasCambiar = 500; // Cada X remesas cambiamos de día a noche o viceve
 const factorNoche = 0.2; // Factor para aumentar los mensajes de día
 
 // Tiempo máximo en ms para generar una nueva remesa de mensajes
-const maxTimeToGenerateMsg = 100;
+const maxTimeToGenerateMsg = 1000;
 // Prioridades de los mensajes
 const maxPriority = 4;
 const minPriority = 1;
@@ -106,7 +105,7 @@ app.get(
     // desencolo de la cola de mensajes tantos mensajes como dice num
     // extraemos los mensajes del principio de la cola
     const returnMsg = msgQueue.splice(0, num);
-    console.log('Desencolamos ', num, ' menajes de la cola. Quedan ', msgQueue.length, ' mensajes en la cola.');
+    //console.log('Desencolamos ', num, ' menajes de la cola. Quedan ', msgQueue.length, ' mensajes en la cola.');
     logMessage( logFilePathREST , num + ";"+msgQueue.length, true);
     // Respondemos con los mensajes extraídos
     res.status(200).json({
@@ -154,7 +153,7 @@ const crearMensajes = () => {
   contador++;
   if (contador % remesasCambiar === 0) {
     esDia = !esDia; 
-    console.log('----------- CAMBIO Ahora es ', esDia ? 'DÍA' : 'NOCHE');
+    console.log('----------- CAMBIO A ', esDia ? 'DÍA' : 'NOCHE', ' -----------');
   }
 
   let newMsg = 0;
@@ -196,7 +195,7 @@ const crearMensajes = () => {
 
   // programamos la siguiente generación de mensajes
   const siguiente = Math.round(Math.random() * maxTimeToGenerateMsg);
-  console.log('Remesa ', contador, '.- Genero ', newMsg, ' nuevos mensajes, la cola tiene ', msgQueue.length, '. Siguiente en ', siguiente, 'ms . Producidos ', producedMessages);
+  console.log('Rem:',contador, ' Gen:', newMsg, ' Next:', siguiente, 'ms Que:', msgQueue.length,  ' Tot:', producedMessages);
   // "Timestamp; Remesa; Num_Mensajes; Cola_Longitud"
   const reg = contador + ';' + newMsg + ';' + msgQueue.length + ";" + siguiente+";"+producedMessages;
   logMessage(logFilePathRemesa, reg, true);
