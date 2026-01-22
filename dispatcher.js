@@ -2,7 +2,7 @@
  * Variables para la conexión al classifier
  */
 const axios = require('axios');
-const ENDPOINT_URL = 'http://localhost:3100/classifier/getmsg';
+const ENDPOINT_URL = 'http://localhost:3100/categoriser/getmsg';
 
 
 /******
@@ -15,8 +15,9 @@ const numMessages = 1000; // número de mensajes a solicitar al classifier
 const tiempoLectura = 1000; // cada segundo
 const porwerPriority = [];  // establecer el valor de potencia de cada cola de prioridad
 const msgPerPriority = []; // mensajes por cada cola de prioridad
-const maxPriority = 4;
-
+// Prioridades de los mensajes, cuanto menor el número, mayor la prioridad, 1 indica máxima prioridad
+const maxPriority = 1; // maxima prioridad
+const minPriority = 4; // minima prioridad
 
 
 // Creamos un endpoint que atiende '/iot_broker/getmsg?num=1234' solicitando X número de mensajes de la cola
@@ -52,8 +53,12 @@ function initializeLogFiles() {
     fs.writeFileSync(logFilePathDispatcher, '', 'utf8');
     fs.writeFileSync(logFilePathREST, '', 'utf8');
 
-    logMessage(logFilePathDispatcher, "Timestamp; P1 ; PowerPriority; msgPerPriority; Reales Leidos (remainint); Reales recibidos;  P2 ; PowerPriority; msgPerPriority; Reales Leidos (remainint); Reales recibidos; P3 ; PowerPriority; msgPerPriority; Reales Leidos (remainint); Reales recibidos; P4 ; PowerPriority; msgPerPriority; Reales Leidos (remainint); Reales recibidos; Expirados; Solicitados; Leidos; Remaining final", false);
-    logMessage(logFilePathREST, "Timestamp; Pedidos ; Extraidos; Quedan", false);
+    let txt = "";
+    for (let i = 0; i < minPriority; i++) {
+        txt += "P" + (i + 1) + " ; PowerPriority" + (i + 1) + "; msgPerPriority" + (i + 1) + "; Real reads (remaining)" + (i + 1) + "; Real receibed" + (i + 1) + "; ";
+    }
+    logMessage(logFilePathDispatcher, "Timestamp; "+txt+" Expired; Request; Read; Remaining final", false);
+    logMessage(logFilePathREST, "Timestamp; Orders ; Extracted; Remaining", false);
 }
 
 initializeLogFiles();
@@ -65,9 +70,9 @@ app.get(
         // Validaciones para los parámetros de la consulta
         query('num')
             .notEmpty()
-            .withMessage('num es un campo requerido.')
+            .withMessage('num is a required field.')
             .isNumeric()
-            .withMessage('num debe ser un numero.')
+            .withMessage('num it must be a number.')
     ],
     (req, res) => {
         // Manejo de los errores de validación
@@ -83,12 +88,15 @@ app.get(
         // desencolo de la cola de mensajes tantos mensajes como dice num
         // extraemos los mensajes del principio de la cola
         const returnMsg = sortPriorityQueu.splice(0, num);
-        console.log('Desencolamos ', num, ' menajes de la cola. Quedan ', sortPriorityQueu.length, ' mensajes en la cola.');
+        console.log("******************* get ***************************");
+        console.log('Dequeue', num, 'queue items. Remaining', sortPriorityQueu.length, 'messages in the queue.');
+        console.log("******************* END get ***************************\n\n");
+        //"Timestamp; Pedidos ; Extraidos; Quedan"
         const reg = num + ";" + returnMsg.length + ";" + sortPriorityQueu.length;
         logMessage(logFilePathREST, reg, true);
         // Respondemos con los mensajes extraídos
         res.status(200).json({
-            message: 'Extraer mensajes de la cola',
+            message: 'Extract messages from the prioritised queue',
             data: req.query,
             mensajes: returnMsg,
             numMsg: returnMsg.length
@@ -98,27 +106,29 @@ app.get(
 
 // Iniciar el servidor
 app.listen(port, () => {
-    console.log(`Dispatcher escuchando en http://localhost:${port}`);
+    console.log(`Dispatcher listening in http://localhost:${port}`);
     // Después de iniciar el servidor, comenzamos a generar mensajes
     launch();
 });
 
 // Cramos el array de powerPriority dando más prioridad a la cola 1, la mitad a la 2, la mitad a la 3... y luego convertimos eso en mensjaes de numMessages
 const configurePowerPriority = () => {
+    let totalPower = 0;
     porwerPriority.push(1)
-    for (let i = 1; i < maxPriority; i++) {
+    totalPower += 1;
+    for (let i = 1; i < minPriority; i++) {
         porwerPriority.push(porwerPriority[i - 1] / 2);
+        totalPower += porwerPriority[i];
     }
     console.log("Power Priority: ", porwerPriority);
+    return totalPower;
 }
 
 const configureMsgPerPriority = () => {
     let resto = numMessages;
-    let totalPowerPriority = 0;
-    for (let i = 0; i < maxPriority; i++) {
-        totalPowerPriority += porwerPriority[i];
-    }
-    for (let i = 0; i < maxPriority - 1; i++) {
+    let totalPowerPriority = configurePowerPriority();
+   
+    for (let i = 0; i < minPriority - 1; i++) {
         msgPerPriority.push(Math.round((porwerPriority[i] / totalPowerPriority) * numMessages, 0));
         resto -= msgPerPriority[i];
     }
@@ -126,7 +136,7 @@ const configureMsgPerPriority = () => {
     console.log("Messages per Priority: ", msgPerPriority);
 }
 
-configurePowerPriority();
+// configuramos los mensajes a componer por prioridad
 configureMsgPerPriority();
 
 
@@ -152,21 +162,20 @@ async function getClassifierMessage(num, priority) {
 
         if (error.response) {
             // El servidor respondió con un código de estado fuera del rango 2xx
-            console.error(`\nError del servidor (${error.response.status}):`);
+            console.error(`\nServer error (${error.response.status}):`);
             console.error(error.response.data);
         } else if (error.request) {
             // La solicitud fue enviada, pero no se recibió respuesta (ej. timeout, servidor caído)
-            console.error("\nNo se recibió respuesta del servidor.");
+            console.error("\nNo response was received from the server..");
         } else {
             // Error de configuración o algo pasó antes de enviar la solicitud
-            console.error("\nError al configurar la solicitud:", error.message);
+            console.error("\nEError configuring the request:", error.message);
         }
         return null;
     }
 
 }
 
-// Falta esta funcion ////////////////////////////////////////////
 /****
  * Función que lee de cada cola, en función del power que tiene definido
  * y mete los mensajes en la cola priorizada
@@ -178,11 +187,14 @@ async function readAndSort() {
     let totalRead = 0;
     let remaining = 0;
     let reg = "";
-    let msg = "Leer: [" + msgPerPriority[0];
-    for (let i = 1; i < maxPriority; i++) { msg += ',' + msgPerPriority[i] }
+      
+
+    let msg = "******************* readAndSoft *******************\nRead from Queues: [" + msgPerPriority[0];
+    for (let i = 1; i < minPriority; i++) { msg += ',' + msgPerPriority[i] }
     msg += "]";
+    console.clear();
     console.log(msg);
-    for (let i = 0; i < maxPriority; i++) {
+    for (let i = 0; i < minPriority; i++) {
         // leemos mensajes de la cola de prioridad i+1
         //     la estructura devuelta estructura{ 
         //   message: 'Extraer mensajes de la cola prioridad' + priority,
@@ -192,7 +204,7 @@ async function readAndSort() {
         remaining += msgPerPriority[i];
         const data = await getClassifierMessage(remaining, i + 1);
         if (!data) {
-            console.error("No se ha podido leer del Classifier");
+            console.error("It has not been possible to read from the Categoriser");
             return;
         }        // Calculamos si ha sobrado potencia
         reg += (i + 1) + ";" + porwerPriority[i] + ";" + msgPerPriority[i] + ";" + remaining + ";" + data.numMsg + ";";
@@ -227,7 +239,7 @@ async function readAndSort() {
             }
             reg += "0;" + remaining + ";" + dataExp.numMsg + ";" + remaining - dataExp.numMsg;
             remaining -= dataExp.numMsg;
-            console.log(`Leídos ${dataExp.numMsg} mensajes de la cola de Expiración. Quedan ${remaining} mensajes por leer.`);
+            console.log(`Read ${dataExp.numMsg} messages from the Expiration queue. Remaining ${remaining} unread messages.`);
 
         } else {
             reg += "0;" + remaining + ";0;" + remaining;
@@ -238,8 +250,9 @@ async function readAndSort() {
     logMessage(logFilePathDispatcher, reg, true);
 
 
-    console.log("\nTotal de mensajes leídos y metidos en la cola priorizada: ", totalRead);
-    console.log("Tamaño actual de la cola priorizada: ", sortPriorityQueu.length);
+    console.log("\nTotal messages read and placed in the prioritised queue: ", totalRead);
+    console.log("Current size of the prioritised queue: ", sortPriorityQueu.length);
+    console.log("******************* END readAndSoft *******************\n\n");
 }
 
 // Ejecutamos la función de leer y ordenar cada segundo 
