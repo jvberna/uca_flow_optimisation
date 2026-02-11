@@ -12,10 +12,13 @@
  * 
  */
 
-
+    
 // Creamos un endpoint que atiende '/iot_broker/getmsg?num=1234' solicitando X número de mensajes de la cola
 const express = require('express');
 const { query, validationResult } = require('express-validator');
+
+// Importar las variables de iot_msg.js
+const { templateMsg } = require('./iot_msg');
 
 const app = express();
 const port = 3000;
@@ -29,6 +32,7 @@ const logFilePathRemesa = 'csv/iot_broker_generation.csv';  // se almacena infor
 const logFilePathREST = 'csv/iot_broker_REST.csv';  // se almacena información sobre las peticiones recibidas
 const logFilePathREST2 = 'csv/iot_broker_REST2.csv';  // se almacena información sobre las peticiones recibidas del segundo endpoint
 const logFilePathGenerate = 'csv/iot_broker_generated.csv';  // se almacena todo lo que se ha generado
+const logFileMsgGenereated = 'csv/iot_broker_msg_generated.csv';  // se almacena todos los mensajes generados
 
 // Cola de mensajes
 let msgQueue = [];
@@ -56,11 +60,11 @@ const minPriority = 4; // minima prioridad
 const weights = [0.05, 0.15, 0.30, 0.50];
 // Controlar el número máximo de mensajes en la cola para depuración, -1 indica sin límite
 const maxQueueMsg = -1;
-
+ 
 // Mensajes totales a producir y contador de cuantos lleva hasta ahora
-const totalMessages = 100000; 
+const totalMessages = 1000000; 
 let producedMessages = 0;
-
+ 
 // Escribir en le archivo de log con/sin timestap
 function logMessage(file, message, printTimestamp = true) { 
   const timestamp = Date.now(); 
@@ -84,7 +88,8 @@ function initializeLogFiles() {
   fs.writeFileSync(logFilePathREST, '', 'utf8');
   fs.writeFileSync(logFilePathREST2, '', 'utf8');
   fs.writeFileSync(logFilePathGenerate, '', 'utf8');
-  logMessage(logFilePathRemesa, "Timestamp; Shipment; Messages generated in shipment; Queue lenght; Next shipment; Total produced", false);
+  fs.writeFileSync(logFileMsgGenereated, '', 'utf8');
+  logMessage(logFilePathRemesa, "Timestamp; Shipment; Messages generated in shipment; Queue Classic lenght; Queue New lenght; Next shipment; Total produced", false);
   logMessage(logFilePathREST, "Timestamp; Read by categoriser; Remaining in queue", false);
   logMessage(logFilePathREST2, "Timestamp; Read by consumer; Remaining in queue", false);
   logMessage(logFilePathGenerate, "Timestamp; Shipment; ID; Priority", false);
@@ -167,11 +172,12 @@ app.get(
 
 // Iniciar el servidor
 app.listen(port, () => {
+  console.clear(); 
   console.log(`IoT Broker listening to http://localhost:${port}`);
   // Después de iniciar el servidor, comenzamos a generar mensajes
   genMsg();
 });
-
+ 
  
 // Función para generar una prioridad aleatoria entre min y max (ambos inclusive)
 const genPriority = () => {
@@ -211,32 +217,42 @@ const genMsg = () => {
   let pri = 0;
   let reg2 = "";
   let ts = 0;
+  let salto = "";
+  let regMsg = "";
   for (let i = 0; i < newMsg; i++) {
     pri = genPriority();
-    ts = Date.now() - iniTimestamp;
+    const timeReg = Date.now()-iniTimestamp;
+    const uidMsg = countShipment + '_' + i;
     msgQueue.push(
       {
         remesa: countShipment,
-        id: countShipment + '_' + i,
+        id: uidMsg,
         priority: pri,
-        timestamp: ts
+        timestamp: timeReg
       });
     msgQueue2.push(
       {
         remesa: countShipment,
-        id: countShipment + '_' + i,
+        id: uidMsg,
         priority: pri,
-        timestamp: ts
+        timestamp: timeReg
       });
 
+    reg2 += salto;
+    salto = "\n";
+    
+    reg2 += timeReg + ";" + countShipment + ";" + uidMsg + ";" + pri ;
 
-    reg2 += Date.now() + ";" + countShipment + ";" + countShipment + '-' + i + ";" + pri + "\n";
+    let msg = templateMsg.replaceAll("**TIME**", timeReg);
+    msg = msg.replaceAll("**DEV_EUI**", pri);
+    msg = msg.replaceAll("**UNIQUE_ID**", uidMsg);
+    regMsg += msg + "\n";
   }
   // Acumulamos el número total de mensajes producidos
   producedMessages += newMsg;
   // Escribimos en logFilePathGenerate: "Timestamp; Remesa; ID; Priority"
   logMessage(logFilePathGenerate, reg2, false);
-
+  logMessage(logFileMsgGenereated, regMsg, false);
   // Si en la cola hay más mensajes de los permitidos, eliminamos los más antiguos
   // Esto no suele hacerse ya que si no se pierden mensajes, pero es útil para depuración
   if (maxQueueMsg > 0 && msgQueue.length > maxQueueMsg) {
@@ -251,9 +267,9 @@ const genMsg = () => {
   const nextShipment = Math.round(Math.random() * maxTimeToGenerateMsg);
   console.log('Rem:', countShipment, ' Gen:', newMsg, ' Next:', nextShipment, 'ms Que:', msgQueue.length, ' Que2:', msgQueue2.length,' Tot:', producedMessages);
   // Escribimos en logFilePathRemesa: "Timestamp; Remesa; Mensajes generado en remesa; Cola Longitud; SiguienteRemesa; Total Producidos"
-  const reg = countShipment + ';' + newMsg + ';' + msgQueue.length + ";" + nextShipment + ";" + producedMessages;
+  const reg = countShipment + ';' + newMsg + ';' + msgQueue2.length + ";" +msgQueue.length + ";" + nextShipment + ";" + producedMessages;
   logMessage(logFilePathRemesa, reg, true);
 
-  setTimeout(genMsg, nextShipment);
+  setTimeout(genMsg, nextShipment); 
 }
 

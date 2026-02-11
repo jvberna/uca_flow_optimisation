@@ -88,6 +88,7 @@ async function getDisptacherMessage() {
 }
 
 async function consumeMessages() {
+    console.clear();
     const data = await getDisptacherMessage();
     if (data === null || !data.mensajes || data.mensajes.length === 0) {
         console.error("Messages could not be obtained from the dispatcher.\n");
@@ -97,7 +98,6 @@ async function consumeMessages() {
     let reg = "";
     // Para cada mensaje leido vamos a escribir en el archivo sus datos
     const timestamp = Date.now();
-    message = timestamp - iniTime
     data.mensajes.forEach(msg => {
         readMsgPriority[msg.priority - 1]++;
         //console.log("Message received: ", msg);
@@ -106,7 +106,8 @@ async function consumeMessages() {
     logMessage(logFilePathConsumer, reg, false);
     reg = "";
     readMsgPriority[minPriority] += data.mensajes.length;
-    console.clear();
+
+    console.log("Read ", data.mensajes.length, "  IoTBroker messages");
     console.log("Consumer NEW - Read messages by priority: ");
     for (let i = maxPriority; i <= minPriority; i++) {
         console.log("  Priority ", i, ": ", readMsgPriority[i - 1], " messages.");

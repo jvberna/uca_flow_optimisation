@@ -18,13 +18,8 @@ for (let i = 0; i <= minPriority; i++) {
 }
 
 // Tiempos de expiracion
-const priorityExpirationTimeQueue = [];
-const baseExpirationTime = 5000; // tiempo base de expiración en ms
-// Inicializamos cada cola a una lista vacía y los expiration time
-for (let i = 0; i < minPriority; i++) {
-  // tiempo de expiración de cada cola comienza en 5seg * prioridad
-  priorityExpirationTimeQueue[i] = baseExpirationTime * (i + 1);
-}
+const priorityExpirationTimeQueue = [5000, 10000, 20000, 60000]; // tiempo de expiración de cada cola en ms
+
 
 
 // Escribir en le archivo de log con timestap

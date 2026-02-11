@@ -189,7 +189,7 @@ async function readAndSort() {
     let reg = "";
       
 
-    let msg = "******************* readAndSoft *******************\nRead from Queues: [" + msgPerPriority[0];
+    let msg = "******************* readAndSort *******************\nRead from Queues: [" + msgPerPriority[0];
     for (let i = 1; i < minPriority; i++) { msg += ',' + msgPerPriority[i] }
     msg += "]";
     console.clear();

@@ -26,16 +26,16 @@ const minPriority = 4; // minima prioridad
 // Estructura de colas de mensajes
 const priorityMsgQueues = [];
 const priorityExpirationTimeQueue = [];
-const baseExpirationTime = 5000; // tiempo base de expiración en ms
+const baseExpirationTime = [5000, 10000, 20000, 60000]; // tiempo base de expiración en ms
 const initialTimestamp = Date.now(); // Cuando se inicia el sistema
 
 // Inicializamos cada cola a una lista vacía y los expiration time
 for (let i = 0; i < minPriority; i++) {
   priorityMsgQueues[i] = [];
   // tiempo de expiración de cada cola comienza en 5seg * prioridad
-  priorityExpirationTimeQueue[i] = baseExpirationTime * (i + 1);
+  priorityExpirationTimeQueue[i] = baseExpirationTime[i];
 }
-
+ 
 // cola de expiración de mensajes
 const expirationMsgQueue = [];
 // Tiempo de comprobación de expiración de mensajes
@@ -97,7 +97,7 @@ function initializeLogFiles() {
     txt2 += " Q" + (i + 1) + ";";
     txt3 += " Q" + (i + 1) + " expired; Q" + (i + 1) + " remaining;";
   }
-  logMessage(logFilePathClassified, "Timestamp; Request; Recovered", false);
+  logMessage(logFilePathClassified, "Timestamp; Request; Recovered; "+txt2, false);
   logMessage(logFilePathREST, "Timestamp; Requests by Dispatcher; Read by Dispatcher; Read Queue; " + txt1 + " Remaining queue expired", false);
   logMessage(logFilePathStatus, "Timestamp; " + txt2 + " Q Expirados", false);
   console.log('Iniciando textos:',txt3, txt2, txt1); 
@@ -226,6 +226,7 @@ async function getIotMessages() {
 
 // función que lee del broker IoT y clasifica los mensjaes recibidos en las colas de prioridad
 async function readFromIotBrokerAndClassify() {
+  console.clear();
   console.log("\n************ Reading from IoT Broker and classifying messages ************");
   let response = await getIotMessages();
   if (!response) {
@@ -245,7 +246,7 @@ async function readFromIotBrokerAndClassify() {
   // Clasificamos los mensajes en las colas de prioridad
   // estructura del mensaje { remesa: X, id: X-Y, priority: Z , timestamp: T}
   let totalReadPriorities = [];
-  for (let i = minPriority; i <= maxPriority; i++) {
+  for (let i = maxPriority; i <= minPriority; i++) {
     totalReadPriorities[i - 1] = 0;
   }
   msgs.forEach(msg => {
@@ -291,7 +292,7 @@ function showQueuesStatus() {
   console.log("expiredQueue ", expirationMsgQueue.length, " msg.");
   console.log("-----------------------------------------------------");
   // "Timestamp; Q1; Q2; Q3; Q4; Expirados"
-  logMessage(logFilePathStatus, txt + ";" + expirationMsgQueue.length, true);
+  logMessage(logFilePathStatus, txt + expirationMsgQueue.length, true);
 }
 
 // función que gestiona la expiración de mensajes en la cola de expiración
